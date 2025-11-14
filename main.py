@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 import faulthandler
-faulthandler.enable(all_threads=True)
+
 from PySide6 import QtWidgets
 
 from app.core.logging_config import configure_logging
@@ -18,6 +18,9 @@ from app.ui.main_window import MainWindow
 
 
 def main() -> None:
+    # Abilita faulthandler per debug crash strani
+    faulthandler.enable(all_threads=True)
+
     # Logging
     configure_logging()
     log = logging.getLogger("main")
@@ -28,6 +31,10 @@ def main() -> None:
     storage_dir = root_dir / "storage"
     images_dir = storage_dir / "images"
     logs_dir = storage_dir / "logs"
+
+    # Assicura che le cartelle base esistano
+    images_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
     log.info("=== Avvio Luna Chat V1 (GUI) ===")
     log.info("Config caricata. Default character: %s", cfg.default_character)
@@ -55,11 +62,15 @@ def main() -> None:
         except Exception as e:
             log.warning("Impossibile caricare theme.qss: %s", e)
 
+    # Finestra principale
     win = MainWindow(chat_engine, image_engine, sd_client)
     win.show()
 
+    # Event loop Qt
     sys.exit(app.exec())
 
 
 if __name__ == "__main__":
     main()
+
+

@@ -39,10 +39,19 @@ class LLMClient:
             self.endpoint = f"{self.base_url}/v1/chat/completions"
         self.log.info(
             "LLMClient inizializzato: endpoint=%s, model=%s, max_tokens=%d, temp=%.2f, top_p=%.2f, timeout=%ds",
-            self.endpoint, self.model, self.max_tokens, self.temperature, self.top_p, self.timeout_s
+            self.endpoint,
+            self.model,
+            self.max_tokens,
+            self.temperature,
+            self.top_p,
+            self.timeout_s,
         )
 
-    def _build_messages(self, character: Character, history: Sequence[ChatMessage]) -> List[Dict[str, str]]:
+    def _build_messages(
+        self,
+        character: Character,
+        history: Sequence[ChatMessage],
+    ) -> List[Dict[str, str]]:
         json_instructions = (
             "IMPORTANT JSON + TAGS + VISUAL RULES:\n\n"
             "You are ALSO an expert cinematic image director and SDXL-like image prompt designer,\n"
@@ -56,16 +65,19 @@ class LLMClient:
             "You MUST respond in PURE JSON, with no extra text, no explanations, and no code fences.\n"
             "The JSON object must have exactly these keys:\n\n"
             "{\n"
-            '  "reply_it": string,\n'
-            '  "tags_en": string[],\n'
-            '  "visual_en": string,\n'
-            '  "follow_up_action": string | null\n'
+            '  \"reply_it\": string,\n'
+            '  \"tags_en\": string[],\n'
+            '  \"visual_en\": string,\n'
+            '  \"follow_up_action\": string | null\n'
             "}\n\n"
             "RULES:\n\n"
             "1) reply_it\n"
             "- Short reply in ITALIAN only.\n"
             "- Stay fully in character (Luna / the current character) in tone and personality.\n"
-            "- Do NOT include any tags or technical notes here, just natural dialogue.\n\n"
+            "- Do NOT include any tags or technical notes here, just natural dialogue.\n"
+            "- NEVER mention JSON, keys, tags_en, visual_en, Stable Diffusion, prompts, models,\n"
+            "  being an AI, or any behind-the-scenes technical process in reply_it.\n"
+            "- In reply_it you are just chatting like a real person in Italian.\n\n"
             "2) tags_en\n"
             "- An array of 8 to 12 short tags in English.\n"
             "- Each tag must be 1–3 words, no full sentences.\n"
@@ -133,35 +145,46 @@ class LLMClient:
         start = content.find("{")
         end = content.rfind("}")
         if start != -1 and end != -1 and end > start:
-            snippet = content[start: end + 1]
+            snippet = content[start : end + 1]
             try:
                 return json.loads(snippet)
             except json.JSONDecodeError:
                 pass
 
-        # 3. NUOVO: Tentativo di parsing con Regex da testo "sporco"
+        # 3. Tentativo di parsing con Regex da testo "sporco"
         try:
-            reply_it_match = re.search(r'^(.*?)tags_en:', content, re.DOTALL | re.IGNORECASE)
+            reply_it_match = re.search(
+                r"^(.*?)tags_en:", content, re.DOTALL | re.IGNORECASE
+            )
             reply_it = reply_it_match.group(1).strip() if reply_it_match else content.strip()
 
             # Pulisce reply_it da altre etichette se trovate prima di tags_en
             for label in ["visual_en:", "follow_up_action:"]:
-                if label in reply_it.lower():
+                if label.lower() in reply_it.lower():
                     reply_it = reply_it.split(label)[0].strip()
 
-            tags_en_match = re.search(r'tags_en:\s*(\[.*?\])', content, re.DOTALL | re.IGNORECASE)
+            tags_en_match = re.search(
+                r"tags_en:\s*(\[.*?\])", content, re.DOTALL | re.IGNORECASE
+            )
             tags_en = json.loads(tags_en_match.group(1)) if tags_en_match else []
 
-            visual_en_match = re.search(r'visual_en:\s*(.*?)(?=\s*follow_up_action:|$)', content,
-                                        re.DOTALL | re.IGNORECASE)
+            visual_en_match = re.search(
+                r"visual_en:\s*(.*?)(?=\s*follow_up_action:|$)",
+                content,
+                re.DOTALL | re.IGNORECASE,
+            )
             visual_en = visual_en_match.group(1).strip() if visual_en_match else ""
 
-            follow_up_match = re.search(r'follow_up_action:\s*(\w+)', content, re.IGNORECASE)
+            follow_up_match = re.search(
+                r"follow_up_action:\s*(\w+)", content, re.IGNORECASE
+            )
             follow_up = follow_up_match.group(1).strip() if follow_up_match else None
 
             # Se abbiamo estratto qualcosa, ricostruiamo e restituiamo
             if tags_en or visual_en:
-                self.log.warning("Output LLM non in JSON, ma recuperato con Regex: %r", content)
+                self.log.warning(
+                    "Output LLM non in JSON, ma recuperato con Regex: %r", content
+                )
                 return {
                     "reply_it": reply_it,
                     "tags_en": tags_en,
@@ -173,44 +196,70 @@ class LLMClient:
             pass
 
         # 4. Fallback finale (solo se tutto il resto è fallito)
-        self.log.error("Impossibile parsare l'output LLM, usando fallback completo: %r", content)
+        self.log.warning(
+            "Impossibile parsare l'output LLM in JSON, uso fallback minimale. Contenuto grezzo: %r",
+            content,
+        )
         return {
-            "reply_it": content.strip().split("tags_en:")[0].strip(),  # Prende solo il testo prima dei tag
+            "reply_it": content.strip().split("tags_en:")[0].strip(),
             "tags_en": [],
             "visual_en": "",
             "follow_up_action": None,
         }
 
-    def generate_reply(self, user_text: str, character: Character, history: Sequence[ChatMessage]) -> LLMReply:
+    def generate_reply(
+        self,
+        user_text: str,
+        character: Character,
+        history: Sequence[ChatMessage],
+    ) -> LLMReply:
         messages = self._build_messages(character=character, history=history)
         payload: Dict[str, Any] = {
-            "model": self.model, "messages": messages, "temperature": self.temperature,
-            "top_p": self.top_p, "max_tokens": self.max_tokens,
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "max_tokens": self.max_tokens,
         }
         headers: Dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        self.log.debug("Chiamata LLM: endpoint=%s, model=%s, history_len=%d", self.endpoint, self.model, len(history))
+        self.log.debug(
+            "Chiamata LLM: endpoint=%s, model=%s, history_len=%d",
+            self.endpoint,
+            self.model,
+            len(history),
+        )
 
         try:
-            resp = requests.post(self.endpoint, headers=headers, json=payload, timeout=self.timeout_s)
+            resp = requests.post(
+                self.endpoint, headers=headers, json=payload, timeout=self.timeout_s
+            )
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
         except (requests.RequestException, KeyError, IndexError, TypeError) as e:
             self.log.error("Errore chiamata o formato risposta LLM: %s", e)
-            return LLMReply(reply_it="[Mi scuso, ma ho avuto un problema tecnico. Riprova.]")
+            return LLMReply(
+                reply_it="[Mi scuso, ma ho avuto un problema tecnico. Riprova.]"
+            )
 
         obj = self._parse_llm_content(content)
 
         reply_it = obj.get("reply_it") or ""
         tags_raw = obj.get("tags_en") or []
-        tags_en = [str(t) for t in tags_raw if str(t).strip()] if isinstance(tags_raw, list) else [str(tags_raw)]
+        if isinstance(tags_raw, list):
+            tags_en = [str(t) for t in tags_raw if str(t).strip()]
+        else:
+            tags_en = [str(tags_raw)] if str(tags_raw).strip() else []
         visual_en = str(obj.get("visual_en") or "")
-        follow_up_action = str(obj.get("follow_up_action")) if obj.get("follow_up_action") is not None else None
+        follow_up_action = (
+            str(obj.get("follow_up_action"))
+            if obj.get("follow_up_action") is not None
+            else None
+        )
 
-        # Soft validation (omessa per brevità, è identica a prima)
         is_fallback = not tags_en and not visual_en
 
         if not is_fallback:

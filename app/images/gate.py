@@ -10,20 +10,41 @@ from app.services.llm_client import LLMReply
 
 # Parole chiave nella richiesta dell'utente
 USER_TRIGGER_WORDS = {
-    "immagine", "immagini", "foto", "fotografia",
-    "picture", "image", "pic", "photo", "scatta", "mostrami", "fammi vedere"
+    "immagine",
+    "immagini",
+    "foto",
+    "fotografia",
+    "picture",
+    "image",
+    "pic",
+    "photo",
+    "scatta",
+    "mostrami",
+    "fammi vedere",
+    "mandami",
+    "mandane",
 }
 
 # Parole chiave nella risposta del personaggio (promessa)
 CHARACTER_PROMISE_WORDS = {
-    "te la mando", "te la invio", "ecco una foto", "te la mostro",
-    "guarda questa", "ecco a te", "ecco per te", "ti invio"
+    "te la mando",
+    "te la invio",
+    "ti mando una foto",
+    "ti mando la foto",
+    "ecco una foto",
+    "te la mostro",
+    "guarda questa",
+    "ecco a te",
+    "ecco per te",
+    "ti invio",
 }
 
 
 class ImageDecision(BaseModel):
     will_generate: bool
-    reason: Literal["user_request", "character_promise", "auto_by_tags", "no_trigger"] = "no_trigger"
+    reason: Literal[
+        "user_request", "character_promise", "follow_up_action", "no_trigger"
+    ] = "no_trigger"
 
 
 def _user_asks_for_image(text: str) -> bool:
@@ -46,37 +67,39 @@ def _character_promises_image(text: str) -> bool:
     return any(phrase in lower for phrase in CHARACTER_PROMISE_WORDS)
 
 
+def _followup_requests_image(reply: LLMReply) -> bool:
+    """
+    True se il modello chiede esplicitamente di generare un'immagine via follow_up_action.
+    """
+    if not reply.follow_up_action:
+        return False
+    return reply.follow_up_action.strip().lower() == "request_image"
+
+
 def decide_image_request(user_text: str, reply: LLMReply) -> ImageDecision:
     """
     Logica di decisione per la generazione di immagini.
-    L'immagine viene generata solo se ALMENO DUE delle seguenti condizioni sono vere:
-    1. Richiesta esplicita dell'utente.
-    2. Promessa esplicita del personaggio.
-    3. Risposta del modello "molto visual" (visual_en + almeno 5 tags_en).
+
+    V1 (stretta, per evitare spam immagini):
+    - Generiamo l'immagine SOLO se almeno UNA di queste è vera:
+      1) Richiesta esplicita dell'utente (parole chiave).
+      2) Promessa esplicita del personaggio (frasi tipo "te la mando una foto").
+      3) follow_up_action == \"request_image\" nel JSON del LLM.
+
+    Nessuna generazione automatica solo perché ci sono tags_en/visual_en.
     """
-    # Valutiamo le tre condizioni in modo indipendente
     is_user_request = _user_asks_for_image(user_text)
     is_character_promise = _character_promises_image(reply.reply_it)
+    is_followup_request = _followup_requests_image(reply)
 
-    has_visual = bool(reply.visual_en and reply.visual_en.strip())
-    sufficient_tags = len(reply.tags_en) >= 5 if reply.tags_en else False
-    is_visual_reply = has_visual and sufficient_tags
+    if is_user_request:
+        return ImageDecision(will_generate=True, reason="user_request")
 
-    # Contiamo quante condizioni sono vere
-    trigger_count = int(is_user_request) + int(is_character_promise) + int(is_visual_reply)
+    if is_character_promise:
+        return ImageDecision(will_generate=True, reason="character_promise")
 
-    # Se il punteggio è almeno 2, generiamo l'immagine
-    if trigger_count >= 2:
-        # Determiniamo la "ragione" con una priorità
-        final_reason: Literal["user_request", "character_promise", "auto_by_tags"]
-        if is_user_request:
-            final_reason = "user_request"
-        elif is_character_promise:
-            final_reason = "character_promise"
-        else:
-            final_reason = "auto_by_tags"
+    if is_followup_request:
+        return ImageDecision(will_generate=True, reason="follow_up_action")
 
-        return ImageDecision(will_generate=True, reason=final_reason)
-
-    # Altrimenti, nessuna generazione
+    # Nessun trigger attivo → niente immagine
     return ImageDecision(will_generate=False, reason="no_trigger")

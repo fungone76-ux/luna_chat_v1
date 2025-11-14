@@ -53,6 +53,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._connect_signals()
         self._init_participants_bar()
 
+        # Focus iniziale sulla barra input
+        self.txt_input.setFocus(QtCore.Qt.OtherFocusReason)
+
     # ----------------- UI setup -----------------
 
     def _build_ui(self) -> None:
@@ -149,6 +152,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._status_progress.setValue(0)
         self.txt_input.setEnabled(True)
         self.btn_send.setEnabled(True)
+
+        # focus automatico sulla barra di input
+        self.txt_input.setFocus(QtCore.Qt.OtherFocusReason)
+
         QtWidgets.QApplication.processEvents(QtCore.QEventLoop.AllEvents)
 
     # ----------------- Slot UI -----------------
