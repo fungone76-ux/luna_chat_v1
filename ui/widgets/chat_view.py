@@ -58,9 +58,14 @@ class ChatBubble(QtWidgets.QFrame):
 
         self._layout.addLayout(head)
 
-        # Corpo testo
+        # Corpo testo (adattivo, non taglia, testo selezionabile)
         body = QtWidgets.QLabel(text)
         body.setWordWrap(True)
+        body.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        body.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Preferred,
+        )
         self._layout.addWidget(body)
 
         # Se abbiamo già un'immagine, la agganciamo
@@ -116,7 +121,15 @@ class ImageViewerDialog(QtWidgets.QDialog):
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
         super().__init__(parent)
+
+        # Finestra vera: ridimensionabile, con min/max/chiudi
         self.setWindowTitle("Anteprima immagine")
+        self.setWindowFlags(
+            QtCore.Qt.Window
+            | QtCore.Qt.WindowMinMaxButtonsHint
+            | QtCore.Qt.WindowCloseButtonHint
+        )
+        self.setSizeGripEnabled(True)
         self.resize(800, 600)
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -131,12 +144,26 @@ class ImageViewerDialog(QtWidgets.QDialog):
                 scene.addPixmap(pm)
                 scene.setSceneRect(pm.rect())
 
+        # Barra pulsanti in basso: schermo intero + chiudi
+        btn_bar = QtWidgets.QHBoxLayout()
+        btn_bar.addStretch(1)
+
+        btn_full = QtWidgets.QPushButton("Schermo intero")
+        btn_full.clicked.connect(self._toggle_fullscreen)
+        btn_bar.addWidget(btn_full)
+
         btn_close = QtWidgets.QPushButton("Chiudi")
         btn_close.clicked.connect(self.accept)
-        hl = QtWidgets.QHBoxLayout()
-        hl.addStretch(1)
-        hl.addWidget(btn_close)
-        layout.addLayout(hl)
+        btn_bar.addWidget(btn_close)
+
+        layout.addLayout(btn_bar)
+
+    @QtCore.Slot()
+    def _toggle_fullscreen(self) -> None:
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
 
 
 class ChatView(QtWidgets.QScrollArea):
