@@ -1,0 +1,29 @@
+{
+  "default_character": "Luna",
+
+  "llm": {
+  "base_url": "http://127.0.0.1:5005/v1",
+  "api_key": "EMPTY",
+  "model": "llama-3.1-8b-instruct-q6_k",
+  "max_tokens": 480,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "timeout_s": 420
+},
+
+
+  "sd": {
+    "base_url": "http://127.0.0.1:7860",
+    "api_key_env": "SD_API_KEY"
+  },
+
+  "paths": {
+    "storage_dir": "storage",
+    "images_dir": "storage/images",
+    "logs_dir": "storage/logs"
+  },
+
+  "logging": {
+    "level": "INFO"
+  }
+}

@@ -1,0 +1,52 @@
+# ---- Python base ----
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---- Virtualenv ----
+.venv/
+venv/
+env/
+
+# ---- Build / dist ----
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- Test cache ----
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- IDE / editor ----
+.idea/
+.vscode/
+*.iml
+
+# ---- File di sistema OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Config locali (non condivise) ----
+config/local_*.json
+
+# ---- Dati runtime del gioco (log, immagini, sessioni) ----
+# Tutto quello che viene generato in esecuzione va ignorato,
+# ma teniamo i .gitkeep/README per mantenere le cartelle vuote.
+storage/**
+
+# eccezioni dentro storage (esempi)
+!storage/.gitkeep
+!storage/README.md
+!storage/logs/.gitkeep
+!storage/images/.gitkeep
+!storage/sessions/.gitkeep
+
+# ---- Log generici ----
+logs/**
+*.log
+
+# ---- Output opzionali SD (se usi cartelle dedicate) ----
+sd_out/**
+images_out/**

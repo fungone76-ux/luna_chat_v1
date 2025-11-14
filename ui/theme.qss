@@ -1,0 +1,185 @@
+/* =========================
+   Luna — Oceano & Latte
+   =========================
+   Ink:    #0b1220
+   Subtle: #3b4657
+   Paper:  #ffffff
+   Canvas: #f6f7fb
+   Border: #e6eaf2
+   Primary:#0ea5a8  (hover #0891b2)
+   Success:#22c55e  Danger:#ef4444
+*/
+
+/* Base */
+QWidget {
+    font-size: 11pt;
+font-family: "Segoe UI","Calibri","Arial",sans-serif;
+    color: #0b1220;
+    background-color: #f6f7fb; /* canvas chiaro */
+}
+QScrollArea, QAbstractScrollArea, QPlainTextEdit { background: #f6f7fb; border: none;
+}
+
+/* Pannelli laterali / contenitori */
+QFrame, QWidget#Panel {
+    background: #ffffff;
+    border: 1px solid #e6eaf2;
+    border-radius: 12px;
+}
+
+/* ChatView area (sfondo chat) */
+ChatView {
+    background-color: #f7f9fc;
+/* niente scuro */
+    border: none;
+}
+
+/* Bolle */
+#Bubble {
+    background: #ffffff;
+/* NPC */
+    border: 1px solid #e6eaf2;
+    border-radius: 14px;
+}
+#Bubble QLabel { font-size: 12pt; color: #0b1220;
+}
+
+/* (Se in ChatView imposti objectName="UserBubble" per le bolle utente) */
+#UserBubble {
+    background: #e8f9f8;
+/* menta soft per l’utente */
+    border: 1px solid #d2f2f0;
+    border-radius: 14px;
+}
+
+/* Input */
+QTextEdit, QLineEdit {
+    font-size: 11pt;
+    color: #0b1220;
+    background: #ffffff;
+    border: 1px solid #dce6f2;
+    border-radius: 10px;
+padding: 10px;
+}
+QTextEdit:focus, QLineEdit:focus { border: 1px solid #b7d7e7; }
+
+/* Bottoni */
+QPushButton {
+    font-size: 11pt;
+    font-weight: 600;
+color: #ffffff;
+    background-color: #0ea5a8;           /* primario teal */
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    min-height: 28px;
+}
+QPushButton:hover { background-color: #0891b2; }
+QPushButton:disabled { background: #bcdde0; color: #f2f6f8;
+}
+
+/* Bottoni secondari e chip stile pill */
+QPushButton#Secondary {
+    background: #eef7f8;
+    color: #0b1220;
+    border: 1px solid #d6ebee;
+}
+QPushButton#Secondary:hover { background: #e4f2f4; }
+
+QFrame#Chip {
+    background: #ffffff;
+    border: 1px solid #e6eaf2;
+    border-radius: 12px;
+}
+
+/* ComboBox & CheckBox per toolbar superiore */
+QComboBox {
+    background: #ffffff;
+    border: 1px solid #e1e8f2;
+    border-radius: 8px;
+padding: 6px 8px;
+}
+QComboBox::drop-down {
+    width: 24px; border-left: 1px solid #e1e8f2;
+}
+QCheckBox { spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 18px; height: 18px;
+    border: 1px solid #cfe0ec; border-radius: 4px; background: #ffffff;
+}
+QCheckBox::indicator:checked {
+    background: #0ea5a8; border: 1px solid #0891b2;
+}
+
+/* ToolButton (es. la “x” nei chip partecipanti) */
+QToolButton {
+    background: #ffffff;
+    border: 1px solid #e6eaf2;
+border-radius: 8px;
+    padding: 4px 6px;
+}
+QToolButton:hover { background: #f0f6f7; }
+
+/* Progress (generazione immagine) */
+QProgressBar {
+    border: 1px solid #e1e8f2;
+border-radius: 10px;
+    text-align: center;
+    background: #ffffff;
+    color: #3b4657;
+}
+QProgressBar::chunk {
+    background-color: #0ea5a8;
+/* barra teal */
+    border-radius: 9px;
+}
+
+/* Etichette piccole/grigio secondario */
+QLabel#Hint, QLabel.hint { color: #3b4657;
+}
+
+/* Link (es. “Apri immagine” dentro bolla) */
+QLabel.link { color: #0ea5a8; text-decoration: underline; }
+QLabel.link:hover { color: #0891b2;
+}
+
+/* Pulsanti danger (se usati, es. Fold) */
+QPushButton#Danger { background: #ef4444; }
+QPushButton#Danger:hover { background: #dc2626;
+}
+/* Poker accents */
+#PokerTableRoot { background: #f7f9fb; }
+
+QPushButton#PokerPrimary {
+  background-color: #0ea5a5;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+padding: 10px 22px;
+}
+QPushButton#PokerPrimary:hover { background-color: #129b9b; }
+QPushButton#PokerPrimary:pressed { background-color: #0a6d6d; }
+
+QPushButton#PokerNeutral {
+  background-color: #e8eef5;
+  color: #0f172a;
+  font-weight: 600;
+border: none;
+  border-radius: 10px;
+  padding: 10px 22px;
+}
+QPushButton#PokerNeutral:hover { background-color: #dbe7f2; }
+QPushButton#PokerNeutral:pressed { background-color: #cbd8e6; }
+
+QPushButton#PokerDanger {
+  background-color: #f14d4d;
+color: white;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 22px;
+}
+QPushButton#PokerDanger:hover { background-color: #e03e3e; }
+QPushButton#PokerDanger:pressed { background-color: #bb2f2f; }
