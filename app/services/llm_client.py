@@ -206,7 +206,7 @@ class LLMClient:
             "- Tags MUST be coherent with the current chat context, based on both the user's\n"
             "  last message and your reply.\n\n"
             "3) visual_en:\n"
-            "- A single English paragraph, 30–60 words.\n"
+            "- A single English paragraph, 20–40 words.\n"
             "- No commands (do NOT say 'the image should show', 'we see', 'create an image of').\n"
             "- Describe the scene like a cinematic frame: who is there, what they are doing,\n"
             "  environment, lighting, mood.\n"
@@ -325,6 +325,7 @@ class LLMClient:
             tags_en = [str(tags_en_raw).strip()] if str(tags_en_raw).strip() else []
 
         # piccoli controlli e warning non bloccanti
+        # piccoli controlli e warning non bloccanti
         if tags_en:
             if not (8 <= len(tags_en) <= 12):
                 self.log.warning(
@@ -342,10 +343,30 @@ class LLMClient:
                     visual_en,
                 )
 
+        # --- LOG DETTAGLIATO DELL’OUTPUT LLM -------------------------
+        visual_preview = visual_en.strip()
+        if len(visual_preview) > 240:
+            visual_preview = visual_preview[:240] + "…"
+
+        self.log.info(
+            "LLM output OK.\n"
+            "  reply_it=%r\n"
+            "  tags_en(%d)=%r\n"
+            "  visual_words=%d\n"
+            "  visual_en=%r",
+            reply_it,
+            len(tags_en),
+            tags_en,
+            len(visual_en.split()) if visual_en else 0,
+            visual_preview,
+        )
+        # --------------------------------------------------------------
+
         return LLMReply(
-            reply_it=reply_it or self._strip_meta_from_reply(raw_text or ""),
+            reply_it=reply_it or (raw_text or "").strip(),
             tags_en=tags_en,
             visual_en=visual_en,
             follow_up_action=None,
             raw_text=raw_text,
         )
+

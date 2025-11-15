@@ -98,8 +98,35 @@ class SDClient:
             "seed": seed if seed is not None else -1,
         }
 
+        # --- LOG DETTAGLIATO DELLA CHIAMATA SD ----------------------
+        # Trunc per non esplodere i log se il prompt è lunghissimo
+        pos_preview = (prompt or "").replace("\n", " ").strip()
+        neg_preview = (negative or "").replace("\n", " ").strip()
+        if len(pos_preview) > 400:
+            pos_preview = pos_preview[:400] + "…"
+        if len(neg_preview) > 400:
+            neg_preview = neg_preview[:400] + "…"
+
+        self.log.info(
+            "SD txt2img request:\n"
+            "  url=%s\n"
+            "  size=%dx%d  steps=%d  cfg=%.2f  sampler=%s  seed=%r\n"
+            "  positive_prompt=%r\n"
+            "  negative_prompt=%r",
+            self.txt2img_url,
+            w,
+            h,
+            self.default_steps,
+            self.default_cfg_scale,
+            self.default_sampler,
+            payload["seed"],
+            pos_preview,
+            neg_preview,
+        )
+        # ------------------------------------------------------------
+
         self.log.debug(
-            "Chiamata SD txt2img: url=%s, w=%d, h=%d, steps=%d, cfg_scale=%.2f, sampler=%s",
+            "Chiamata SD txt2img (raw): url=%s, w=%d, h=%d, steps=%d, cfg_scale=%.2f, sampler=%s",
             self.txt2img_url,
             w,
             h,
@@ -151,5 +178,16 @@ class SDClient:
             self.log.error("Errore scrivendo file immagine: %s", e)
             return {"image_path": None, "error": "write_failed"}
 
-        self.log.info("Immagine generata: %s", out_path)
-        return {"image_path": str(out_path)}
+        # --- LOG DETTAGLIATO RISULTATO SD ---------------------------
+        self.log.info(
+            "SD txt2img OK. Immagine salvata in %s (size=%dx%d, steps=%d, cfg=%.2f, sampler=%s)",
+            out_path,
+            w,
+            h,
+            self.default_steps,
+            self.default_cfg_scale,
+            self.default_sampler,
+        )
+        # ------------------------------------------------------------
+
+        return {"image_path": str(out_path), "error": ""}
