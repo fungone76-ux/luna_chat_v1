@@ -133,6 +133,37 @@ class LLMClient:
         )
 
     # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _strip_meta_from_reply(self, text: str) -> str:
+        """
+        Rimuove eventuali pezzi tecnici (tags_en:, visual_en:, ecc.)
+        dal testo della risposta, così nella chat vediamo solo l'italiano.
+        """
+        if not text:
+            return text
+
+        lowered = str(text).lower()
+        cut_positions: List[int] = []
+
+        for marker in (
+            "tags_en:",
+            "visual_en:",
+            "follow_up_action:",
+            "positive_prompt:",
+            "negative_prompt:",
+        ):
+            idx = lowered.find(marker)
+            if idx != -1:
+                cut_positions.append(idx)
+
+        if cut_positions:
+            cut_at = min(cut_positions)
+            return str(text)[:cut_at].rstrip()
+
+        return str(text).strip()
+
+    # ------------------------------------------------------------------
     # Costruzione messaggi
     # ------------------------------------------------------------------
     def _build_messages(self, character: Any, history: Sequence[Any]) -> List[Dict[str, str]]:
@@ -256,8 +287,9 @@ class LLMClient:
         except Exception as e:
             self.log.error("Errore chiamata LLM o formato risposta: %s", e)
             # fallback minimale
+            fallback_text = self._strip_meta_from_reply(raw_text or "")
             return LLMReply(
-                reply_it="[Scusa, ho avuto un problema tecnico con il modello. Riproviamo tra poco.]",
+                reply_it=fallback_text or "[Scusa, ho avuto un problema tecnico con il modello. Riproviamo tra poco.]",
                 tags_en=[],
                 visual_en="",
                 follow_up_action=None,
@@ -272,15 +304,18 @@ class LLMClient:
                 "Output LLM senza struttura attesa, uso fallback minimale. Contenuto grezzo: %r",
                 raw_text,
             )
+            fallback_text = self._strip_meta_from_reply(raw_text or "")
             return LLMReply(
-                reply_it=(raw_text or "").strip(),
+                reply_it=fallback_text,
                 tags_en=[],
                 visual_en="",
                 follow_up_action=None,
                 raw_text=raw_text,
             )
 
-        reply_it = str(parsed.get("reply_it") or "").strip()
+        reply_it_raw = str(parsed.get("reply_it") or "").strip()
+        reply_it = self._strip_meta_from_reply(reply_it_raw)
+
         tags_en_raw = parsed.get("tags_en") or []
         visual_en = str(parsed.get("visual_en") or "").strip()
 
@@ -308,7 +343,7 @@ class LLMClient:
                 )
 
         return LLMReply(
-            reply_it=reply_it or (raw_text or "").strip(),
+            reply_it=reply_it or self._strip_meta_from_reply(raw_text or ""),
             tags_en=tags_en,
             visual_en=visual_en,
             follow_up_action=None,
