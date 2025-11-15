@@ -190,6 +190,12 @@ class LLMClient:
             "reply_it: <short reply in Italian, in character>\n"
             "tags_en: [\"tag1\", \"tag2\", \"tag3\", ...]\n"
             "visual_en: <cinematic English description of the image scene>\n\n"
+            "HARD REQUIREMENTS (MANDATORY):\n"
+            "- All three sections (reply_it, tags_en, visual_en) are REQUIRED in every answer.\n"
+            "- Never omit tags_en or visual_en, even if the user message is very short or simple.\n"
+            "- Never change the labels or their order.\n"
+            "- If you ever answer without this full structure, you must immediately correct yourself\n"
+            "  and answer again using exactly this structure only (reply_it, tags_en, visual_en).\n\n"
             "DETAILS:\n"
             "1) reply_it:\n"
             "- This is the ONLY part shown to the user.\n"
@@ -275,6 +281,13 @@ class LLMClient:
         raw_text: Optional[str] = None
 
         try:
+            self.log.info(
+                "Chiamata LLM in corso: endpoint=%s, model=%s, timeout=%ds",
+                self.endpoint,
+                self.model,
+                self.timeout_s,
+            )
+
             resp = requests.post(
                 self.endpoint,
                 headers=headers,
@@ -284,29 +297,33 @@ class LLMClient:
             resp.raise_for_status()
             data = resp.json()
             raw_text = data["choices"][0]["message"]["content"]
-        except Exception as e:
-            self.log.error("Errore chiamata LLM o formato risposta: %s", e)
-            # fallback minimale
-            fallback_text = self._strip_meta_from_reply(raw_text or "")
+
+            self.log.info(
+                "Risposta LLM ricevuta (lunghezza=%d caratteri).",
+                len(raw_text or ""),
+            )
+
+        except requests.exceptions.Timeout:
+            self.log.error(
+                "Timeout LLM dopo %d secondi. Nessuna risposta dal modello.",
+                self.timeout_s,
+            )
+            # Risposta di fallback leggibile
             return LLMReply(
-                reply_it=fallback_text or "[Scusa, ho avuto un problema tecnico con il modello. Riproviamo tra poco.]",
+                reply_it="[Scusa, ci sto mettendo troppo a rispondere. Riproviamo tra poco.]",
                 tags_en=[],
                 visual_en="",
                 follow_up_action=None,
                 raw_text=raw_text,
             )
 
-        # Parsing del testo prodotto dal modello
-        parsed = _parse_structured_text(raw_text or "")
-        if not parsed:
-            # il modello non ha rispettato il formato → risposta solo testuale
-            self.log.warning(
-                "Output LLM senza struttura attesa, uso fallback minimale. Contenuto grezzo: %r",
-                raw_text,
-            )
+        except Exception as e:
+            self.log.error("Errore chiamata LLM o formato risposta: %s", e)
+            # fallback minimale
             fallback_text = self._strip_meta_from_reply(raw_text or "")
             return LLMReply(
-                reply_it=fallback_text,
+                reply_it=fallback_text
+                         or "[Scusa, ho avuto un problema tecnico con il modello. Riproviamo tra poco.]",
                 tags_en=[],
                 visual_en="",
                 follow_up_action=None,
