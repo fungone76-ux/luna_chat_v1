@@ -18,7 +18,7 @@ from app.ui.main_window import MainWindow
 
 
 def main() -> None:
-    # Abilita faulthandler per debug crash strani
+    # Abilita faulthandler per crash strani a livello C
     faulthandler.enable(all_threads=True)
 
     # Logging
@@ -64,7 +64,11 @@ def main() -> None:
 
     # Finestra principale
     win = MainWindow(chat_engine, image_engine, sd_client)
-    win.show()
+
+    # 🔹 Avvio direttamente a finestra intera (massimizzata)
+    win.showMaximized()
+    # Se un giorno la vuoi veramente full screen senza barra titoli:
+    # win.showFullScreen()
 
     # Event loop Qt
     sys.exit(app.exec())
@@ -72,5 +76,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

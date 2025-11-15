@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtWidgets, QtCore, QtGui
 
 from ui.widgets.chat_view import ChatView, ImageViewerDialog
 from ui.widgets.participants_bar import ParticipantsBar
@@ -11,17 +11,17 @@ from ui.panels.prompt_preview import PromptPreview
 
 from app.chat.engine import ChatEngine
 from app.images.engine import ImageEngine, ImagePrompts
-from app.services.sd_client import SDClient
 from app.images.gate import decide_image_request
 from app.services.llm_client import LLMReply
+from app.services.sd_client import SDClient
 
 
 class MainWindow(QtWidgets.QMainWindow):
     """
     Finestra principale 1:1 (senza thread, tutto sincrono):
     - ParticipantsBar in alto
-    - ChatView a sinistra
-    - PromptPreview a destra
+    - ChatView a sinistra (molto ampia, rapporto fisso)
+    - PromptPreview a destra (più stretta, rapporto fisso)
     - Barra di input in basso
     - Status bar in fondo con stato operazione
     """
@@ -48,6 +48,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._last_user_text: str = ""
         self._busy: bool = False
+        self._geometry_locked: bool = False  # 🔹 blocco geometria dopo il primo show
 
         self._build_ui()
         self._connect_signals()
@@ -56,11 +57,31 @@ class MainWindow(QtWidgets.QMainWindow):
         # Focus iniziale sulla barra input
         self.txt_input.setFocus(QtCore.Qt.OtherFocusReason)
 
+    # ----------------- Lock geometria -----------------
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:  # type: ignore[name-defined]
+        """
+        Alla prima visualizzazione:
+        - ci assicuriamo che la finestra sia massimizzata
+        - blocchiamo la dimensione minima all'attuale size (schermo pieno)
+        Così, anche se i widget interni cambiano sizeHint, la finestra non si restringe.
+        """
+        super().showEvent(event)
+        if not self._geometry_locked:
+            self._geometry_locked = True
+            # se non è già massimizzata, massimizza
+            if not self.isMaximized():
+                self.setWindowState(self.windowState() | QtCore.Qt.WindowMaximized)
+            # blocca la dimensione minima alla dimensione attuale
+            current_size = self.size()
+            self.setMinimumSize(current_size)
+
     # ----------------- UI setup -----------------
 
     def _build_ui(self) -> None:
         self.setWindowTitle(f"Luna Chat v1 — 1:1 con {self._character_name}")
-        self.resize(1100, 720)
+        # Dimensione di base (prima della massimizzazione)
+        self.resize(1200, 780)
 
         central = QtWidgets.QWidget(self)
         root_layout = QtWidgets.QVBoxLayout(central)
@@ -76,20 +97,23 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         root_layout.addWidget(self.participants_bar, 0)
 
-        # Splitter centrale: chat a sinistra, prompt a destra
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, central)
+        # Pannello centrale con layout fisso chat / preview
+        center_widget = QtWidgets.QWidget(central)
+        center_layout = QtWidgets.QHBoxLayout(center_widget)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(8)
 
+        # ChatView molto più larga (stretch 4)
         self.chat_view = ChatView(base_dir=self._root_dir, app_state=None)
-        splitter.addWidget(self.chat_view)
+        center_layout.addWidget(self.chat_view, 4)
 
+        # PromptPreview più stretto (stretch 1) e larghezza limitata
         self.prompt_preview = PromptPreview(base_dir=self._root_dir)
-        splitter.addWidget(self.prompt_preview)
+        self.prompt_preview.setMinimumWidth(260)
+        self.prompt_preview.setMaximumWidth(380)
+        center_layout.addWidget(self.prompt_preview, 1)
 
-        # Chat molto più larga, pannello SD più stretto
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
-
-        root_layout.addWidget(splitter, 1)
+        root_layout.addWidget(center_widget, 1)
 
         # Barra di input in basso
         bottom = QtWidgets.QHBoxLayout()
