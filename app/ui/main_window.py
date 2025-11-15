@@ -1,7 +1,7 @@
 # file: app/ui/main_window.py
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from PySide6 import QtWidgets, QtCore, QtGui
 
@@ -16,9 +16,77 @@ from app.services.llm_client import LLMReply
 from app.services.sd_client import SDClient
 
 
+# ---------------------- WORKER THREADS ----------------------
+
+
+class LLMWorker(QtCore.QObject):
+    """
+    Worker che chiama ChatEngine.process_user_message in un thread separato.
+    """
+    finished = QtCore.Signal(object, object)  # new_session, reply
+    error = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        chat_engine: ChatEngine,
+        session: Any,
+        user_text: str,
+        parent: Optional[QtCore.QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._chat_engine = chat_engine
+        self._session = session
+        self._user_text = user_text
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            new_session, reply = self._chat_engine.process_user_message(
+                self._session, self._user_text
+            )
+            self.finished.emit(new_session, reply)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class SDWorker(QtCore.QObject):
+    """
+    Worker che chiama SDClient.txt2img in un thread separato.
+    """
+    finished = QtCore.Signal(dict)   # result dict
+    error = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        sd_client: SDClient,
+        positive_prompt: str,
+        negative_prompt: str,
+        parent: Optional[QtCore.QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._sd_client = sd_client
+        self._positive = positive_prompt
+        self._negative = negative_prompt
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            result = self._sd_client.txt2img(self._positive, self._negative)
+            err = result.get("error") or ""
+            if err:
+                self.error.emit(err)
+            else:
+                self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+# ---------------------- MAIN WINDOW ----------------------
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """
-    Finestra principale 1:1 (senza thread, tutto sincrono):
+    Finestra principale 1:1 (con LLM e SD in thread, GUI non bloccata):
     - ParticipantsBar in alto
     - ChatView a sinistra (molto ampia, rapporto fisso)
     - PromptPreview a destra (più stretta, rapporto fisso)
@@ -48,7 +116,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._last_user_text: str = ""
         self._busy: bool = False
-        self._geometry_locked: bool = False  # 🔹 blocco geometria dopo il primo show
+        self._geometry_locked: bool = False  # blocco geometria dopo il primo show
+
+        # thread in uso (solo per tenere un riferimento)
+        self._llm_thread: Optional[QtCore.QThread] = None
+        self._sd_thread: Optional[QtCore.QThread] = None
 
         self._build_ui()
         self._connect_signals()
@@ -198,32 +270,45 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chat_view.add_bubble(text, who="Tu", is_user=True)
         self.txt_input.clear()
 
-        # esegue LLM in modo sincrono
-        self._run_llm_turn(text)
+        # avvia il worker per il LLM in background
+        self._start_llm_worker(text)
 
-    # ----------------- LLM & SD sync -----------------
+    # ----------------- LLM async -----------------
 
-    def _run_llm_turn(self, user_text: str) -> None:
-        """Chiama il ChatEngine in modo sincrono (senza thread)."""
+    def _start_llm_worker(self, user_text: str) -> None:
+        """Crea un QThread e un LLMWorker per eseguire il modello in background."""
         self._set_busy(f"{self._character_name} sta scrivendo…")
 
-        try:
-            new_session, reply = self.chat_engine.process_user_message(
-                self._session, user_text
-            )
-        except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Errore LLM", str(e))
-            self._set_idle()
-            return
+        llm_thread = QtCore.QThread(self)
+        worker = LLMWorker(self.chat_engine, self._session, user_text)
 
+        worker.moveToThread(llm_thread)
+
+        llm_thread.started.connect(worker.run)
+        worker.finished.connect(self._on_llm_finished)
+        worker.error.connect(self._on_llm_error)
+
+        # cleanup thread/worker
+        worker.finished.connect(llm_thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(llm_thread.quit)
+        worker.error.connect(worker.deleteLater)
+        llm_thread.finished.connect(llm_thread.deleteLater)
+
+        self._llm_thread = llm_thread
+        llm_thread.start()
+
+    @QtCore.Slot(object, object)
+    def _on_llm_finished(self, new_session: Any, reply: Any) -> None:
+        """Chiamata sul thread UI quando il worker LLM ha finito."""
         self._session = new_session
 
-        # aggiungi bolla del personaggio
         if isinstance(reply, LLMReply):
             reply_text = reply.reply_it
         else:
             reply_text = str(getattr(reply, "reply_it", reply))
 
+        # bolla del personaggio
         self.chat_view.add_bubble(
             reply_text,
             who=self._character_name,
@@ -236,38 +321,54 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             decision = type("D", (), {"will_generate": False})()
 
-        if decision.will_generate:
+        if getattr(decision, "will_generate", False):
             prompts = self.image_engine.build_prompts(self._character_name, reply)
-            # aggiorna pannello prompt
-            self.prompt_preview.set_text(prompts.positive)
-            self.prompt_preview.set_negative_text(prompts.negative)
-            # genera immagine (sync)
-            self._run_sd_generation(prompts)
+            self._start_sd_worker(prompts)
         else:
             self._set_idle()
 
-    def _run_sd_generation(self, prompts: ImagePrompts) -> None:
-        """Chiama SD in modo sincrono (senza thread)."""
+    @QtCore.Slot(str)
+    def _on_llm_error(self, message: str) -> None:
+        QtWidgets.QMessageBox.warning(self, "Errore LLM", message)
+        self._set_idle()
+
+    # ----------------- SD async -----------------
+
+    def _start_sd_worker(self, prompts: ImagePrompts) -> None:
+        """Avvia un thread per SD txt2img."""
+        # aggiorna pannello prompt
+        self.prompt_preview.set_text(prompts.positive)
+        self.prompt_preview.set_negative_text(prompts.negative)
+
         self._set_busy("Sto generando l'immagine…")
 
-        try:
-            result = self.sd_client.txt2img(
-                prompts.positive,
-                prompts.negative,
-            )
-        except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Errore SD", str(e))
-            self._set_idle()
-            return
+        sd_thread = QtCore.QThread(self)
+        worker = SDWorker(self.sd_client, prompts.positive, prompts.negative)
 
+        worker.moveToThread(sd_thread)
+
+        sd_thread.started.connect(worker.run)
+        worker.finished.connect(self._on_sd_finished)
+        worker.error.connect(self._on_sd_error)
+
+        # cleanup
+        worker.finished.connect(sd_thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(sd_thread.quit)
+        worker.error.connect(worker.deleteLater)
+        sd_thread.finished.connect(sd_thread.deleteLater)
+
+        self._sd_thread = sd_thread
+        sd_thread.start()
+
+    @QtCore.Slot(dict)
+    def _on_sd_finished(self, result: dict) -> None:
         image_path = result.get("image_path") or ""
-        error = result.get("error") or ""
-
-        if not image_path or error:
+        if not image_path:
             QtWidgets.QMessageBox.warning(
                 self,
                 "Errore SD",
-                error or "Errore sconosciuto durante la generazione dell'immagine.",
+                "Errore sconosciuto durante la generazione dell'immagine.",
             )
             self._set_idle()
             return
@@ -276,6 +377,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.prompt_preview.set_image(image_path)
         self.chat_view.attach_image_to_last_character_bubble(image_path)
 
+        self._set_idle()
+
+    @QtCore.Slot(str)
+    def _on_sd_error(self, message: str) -> None:
+        QtWidgets.QMessageBox.warning(self, "Errore SD", message)
         self._set_idle()
 
     # ----------------- Image viewer -----------------
